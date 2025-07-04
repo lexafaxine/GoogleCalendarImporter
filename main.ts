@@ -1,17 +1,27 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
+import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
 
 interface GoogleCalendarImporterSettings {
 	calendarMarker: string;
 	enabledForDailyNotes: boolean;
+	googleClientId: string;
+	googleClientSecret: string;
+	googleAccessToken: string;
+	googleRefreshToken: string;
 }
 
 const DEFAULT_SETTINGS: GoogleCalendarImporterSettings = {
 	calendarMarker: '<!-- google-calendar -->',
-	enabledForDailyNotes: true
+	enabledForDailyNotes: true,
+	googleClientId: '',
+	googleClientSecret: '',
+	googleAccessToken: '',
+	googleRefreshToken: ''
 }
 
 export default class GoogleCalendarImporter extends Plugin {
 	settings: GoogleCalendarImporterSettings;
+	private googleCalendarAPI: GoogleCalendarAPI;
 
 	async onload() {
 		await this.loadSettings();
@@ -39,11 +49,49 @@ export default class GoogleCalendarImporter extends Plugin {
 	}
 
 	onunload() {
-
+		if (this.googleCalendarAPI) {
+			this.googleCalendarAPI.cleanup();
+		}
 	}
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.initializeGoogleCalendarAPI();
+	}
+
+	private initializeGoogleCalendarAPI() {
+		const credentials: GoogleCalendarCredentials = {
+			clientId: this.settings.googleClientId,
+			clientSecret: this.settings.googleClientSecret,
+			accessToken: this.settings.googleAccessToken,
+			refreshToken: this.settings.googleRefreshToken
+		};
+		this.googleCalendarAPI = new GoogleCalendarAPI(credentials);
+	}
+
+	async handleGoogleAuth() {
+		if (!this.settings.googleClientId || !this.settings.googleClientSecret) {
+			new Notice('Please configure Google Client ID and Client Secret first');
+			return;
+		}
+
+		try {
+			new Notice('Starting authorization process...');
+			console.log('Starting Google OAuth flow...');
+			const tokens = await this.googleCalendarAPI.startOAuthFlow();
+			
+			if (tokens) {
+				this.settings.googleAccessToken = tokens.access_token;
+				this.settings.googleRefreshToken = tokens.refresh_token || '';
+				await this.saveSettings();
+				this.initializeGoogleCalendarAPI();
+				new Notice('Successfully authorized with Google Calendar!');
+				console.log('OAuth flow completed successfully');
+			}
+		} catch (error) {
+			console.error('Error during OAuth flow:', error);
+			new Notice(`Authorization failed: ${error.message}`);
+		}
 	}
 
 	async saveSettings() {
@@ -55,6 +103,11 @@ export default class GoogleCalendarImporter extends Plugin {
 		return dailyNotesFormat.test(file.basename);
 	}
 
+	private extractDateFromFilename(file: TFile): string {
+		const dateMatch = file.basename.match(/\d{4}-\d{2}-\d{2}/);
+		return dateMatch ? dateMatch[0] : '';
+	}
+
 	async injectCalendarEvents(file: TFile) {
 		if (!this.settings.enabledForDailyNotes && this.isDailyNote(file)) {
 			return;
@@ -63,12 +116,25 @@ export default class GoogleCalendarImporter extends Plugin {
 		if (content.includes(this.settings.calendarMarker)) {
 			return;
 		}
-		const calendarBlock = `\n\n${this.settings.calendarMarker}\n## 📅 Today's Calendar Events\n\n- 🕘 9:00 AM - Team Standup Meeting\n- 🕐 1:00 PM - Project Review\n- 🕒 3:30 PM - Client Call\n\n**Tasks:**\n- [ ] Review quarterly reports\n- [ ] Update project timeline\n- [ ] Prepare presentation slides\n\n${this.settings.calendarMarker}\n`;
+
+		const dateString = this.extractDateFromFilename(file);
+		if (!dateString) {
+			new Notice('Could not extract date from filename');
+			return;
+		}
+
+		const calendarData = await this.googleCalendarAPI.getEventsAndTasksForDate(dateString);
+		if (!calendarData) {
+			new Notice('Failed to fetch calendar data');
+			return;
+		}
+
+		const calendarBlock = `\n\n${this.settings.calendarMarker}\n## 📅 Calendar Data for ${dateString}\n\n\`\`\`json\n${JSON.stringify(calendarData, null, 2)}\n\`\`\`\n\n${this.settings.calendarMarker}\n`;
 
 		const newContent = content + calendarBlock;
 		await this.app.vault.modify(file, newContent);
 		
-		new Notice('Calendar events imported!');
+		new Notice('Calendar events and tasks imported!');
 	}
 }
 
@@ -105,5 +171,43 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 					this.plugin.settings.calendarMarker = value;
 					await this.plugin.saveSettings();
 				}));
+
+		containerEl.createEl('h3', {text: 'Google Calendar API Settings'});
+
+		new Setting(containerEl)
+			.setName('Google Client ID')
+			.setDesc('OAuth 2.0 client ID from Google Cloud Console')
+			.addText(text => text
+				.setPlaceholder('Enter your Google Client ID')
+				.setValue(this.plugin.settings.googleClientId)
+				.onChange(async (value) => {
+					this.plugin.settings.googleClientId = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Google Client Secret')
+			.setDesc('OAuth 2.0 client secret from Google Cloud Console')
+			.addText(text => text
+				.setPlaceholder('Enter your Google Client Secret')
+				.setValue(this.plugin.settings.googleClientSecret)
+				.onChange(async (value) => {
+					this.plugin.settings.googleClientSecret = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Google Authorization')
+			.setDesc('Click to authorize access to your Google Calendar')
+			.addButton(button => button
+				.setButtonText('Authorize Google Calendar')
+				.onClick(async () => {
+					await this.plugin.handleGoogleAuth();
+				}));
+
+		const authStatus = this.plugin.settings.googleAccessToken ? 'Authorized ✓' : 'Not authorized';
+		new Setting(containerEl)
+			.setName('Authorization Status')
+			.setDesc(`Current status: ${authStatus}`);
 	}
 }
