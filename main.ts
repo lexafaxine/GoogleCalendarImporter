@@ -78,6 +78,7 @@ export default class GoogleCalendarImporter extends Plugin {
 		try {
 			new Notice('Starting authorization process...');
 			console.log('Starting Google OAuth flow...');
+			
 			const tokens = await this.googleCalendarAPI.startOAuthFlow();
 			
 			if (tokens) {
