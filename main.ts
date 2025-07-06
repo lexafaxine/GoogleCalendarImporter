@@ -1,5 +1,6 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
+import { Credentials } from "google-auth-library";
 
 interface GoogleCalendarImporterSettings {
 	calendarMarker: string;
@@ -66,7 +67,19 @@ export default class GoogleCalendarImporter extends Plugin {
 			accessToken: this.settings.googleAccessToken,
 			refreshToken: this.settings.googleRefreshToken
 		};
-		this.googleCalendarAPI = new GoogleCalendarAPI(credentials);
+
+		const onTokensUpdated = async (tokens: Credentials) => {
+			console.log('Tokens updated automatically');
+			if (tokens.access_token) {
+				this.settings.googleAccessToken = tokens.access_token;
+			}
+			if (tokens.refresh_token) {
+				this.settings.googleRefreshToken = tokens.refresh_token;
+			}
+			await this.saveSettings();
+		};
+
+		this.googleCalendarAPI = new GoogleCalendarAPI(credentials, onTokensUpdated);
 	}
 
 	async handleGoogleAuth() {
@@ -81,7 +94,7 @@ export default class GoogleCalendarImporter extends Plugin {
 			
 			const tokens = await this.googleCalendarAPI.startOAuthFlow();
 			
-			if (tokens) {
+			if (tokens.access_token && tokens.refresh_token) {
 				this.settings.googleAccessToken = tokens.access_token;
 				this.settings.googleRefreshToken = tokens.refresh_token || '';
 				await this.saveSettings();
