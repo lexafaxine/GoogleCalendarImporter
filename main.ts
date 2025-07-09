@@ -84,27 +84,21 @@ export default class GoogleCalendarImporter extends Plugin {
 
 	async handleGoogleAuth() {
 		if (!this.settings.googleClientId || !this.settings.googleClientSecret) {
-			new Notice('Please configure Google Client ID and Client Secret first');
 			return;
 		}
 
 		try {
-			new Notice('Starting authorization process...');
 			console.log('Starting Google OAuth flow...');
-			
 			const tokens = await this.googleCalendarAPI.startOAuthFlow();
-			
 			if (tokens.access_token && tokens.refresh_token) {
 				this.settings.googleAccessToken = tokens.access_token;
 				this.settings.googleRefreshToken = tokens.refresh_token || '';
 				await this.saveSettings();
 				this.initializeGoogleCalendarAPI();
-				new Notice('Successfully authorized with Google Calendar!');
 				console.log('OAuth flow completed successfully');
 			}
 		} catch (error) {
 			console.error('Error during OAuth flow:', error);
-			new Notice(`Authorization failed: ${error.message}`);
 		}
 	}
 
@@ -126,10 +120,6 @@ export default class GoogleCalendarImporter extends Plugin {
 		if (!this.settings.enabledForDailyNotes && this.isDailyNote(file)) {
 			return;
 		}
-		const content = await this.app.vault.read(file);
-		if (content.includes(this.settings.calendarMarker)) {
-			return;
-		}
 
 		const dateString = this.extractDateFromFilename(file);
 		if (!dateString) {
@@ -139,16 +129,27 @@ export default class GoogleCalendarImporter extends Plugin {
 
 		const calendarData = await this.googleCalendarAPI.getEventsAndTasksForDate(dateString);
 		if (!calendarData) {
-			new Notice('Failed to fetch calendar data');
+			new Notice('Failed to fetch calendar data. Please check your credentials.');
 			return;
 		}
 
-		const calendarBlock = `\n\n${this.settings.calendarMarker}\n## 📅 Calendar Data for ${dateString}\n\n\`\`\`json\n${JSON.stringify(calendarData, null, 2)}\n\`\`\`\n\n${this.settings.calendarMarker}\n`;
+		const newCalendarBlock = `\n\n${this.settings.calendarMarker}\n## 📅 Calendar Data for ${dateString}\n\n\`\`\`json\n${JSON.stringify(calendarData, null, 2)}\n\`\`\`\n\n${this.settings.calendarMarker}\n`;
 
-		const newContent = content + calendarBlock;
+		const content = await this.app.vault.read(file);
+		let newContent: string;
+
+		if (content.includes(this.settings.calendarMarker)) {
+			// Replace existing calendar block with latest data
+			const regex = new RegExp(
+				`\\n\\n${this.settings.calendarMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${this.settings.calendarMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n`,
+				'g'
+			);
+			newContent = content.replace(regex, newCalendarBlock);
+		} else {
+			newContent = newCalendarBlock + content;
+		}
 		await this.app.vault.modify(file, newContent);
-		
-		new Notice('Calendar events and tasks imported!');
+		new Notice('Calendar events and tasks updated!');
 	}
 }
 

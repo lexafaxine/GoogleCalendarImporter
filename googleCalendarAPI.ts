@@ -1,5 +1,4 @@
 import { calendar_v3, google, tasks_v1 } from "googleapis";
-import { Notice } from "obsidian";
 import { OAuthServer, OAuthCredentials } from "./oauthServer";
 import { Credentials } from "google-auth-library";
 export interface GoogleCalendarCredentials {
@@ -88,9 +87,6 @@ export class GoogleCalendarAPI {
 			return response.data;
 		} catch (error) {
 			console.error("Error fetching calendar events:", error);
-			new Notice(
-				"Failed to fetch calendar events. Check your API credentials."
-			);
 			return null;
 		}
 	}
@@ -102,22 +98,46 @@ export class GoogleCalendarAPI {
 					"Google Calendar API credentials not configured"
 				);
 			}
-
+			const taskListsResponse = await this.tasks.tasklists.list();
+			const taskLists = taskListsResponse.data.items || [];
+			
 			const targetDate = new Date(date);
-			const dateString = targetDate.toISOString().split("T")[0];
+			targetDate.setHours(23, 59, 59, 999); 
 
-			const response = await this.tasks.tasks.list({
-				tasklist: "@default",
-				dueMax: `${dateString}T23:59:59.000Z`,
-				dueMin: `${dateString}T00:00:00.000Z`,
-				showCompleted: true,
+			const oneYearAgo = new Date(targetDate);
+			oneYearAgo.setDate(oneYearAgo.getDate() - 365);
+			
+			const taskPromises = taskLists.map(async (taskList) => {
+				if (!taskList.id) return [];
+				try {
+					const response = await this.tasks.tasks.list({
+						tasklist: taskList.id,
+						showCompleted: false, 
+						maxResults: 100,
+					});
+					const tasks = response.data.items || [];
+					const filteredTasks = tasks.filter(task => {
+						if (!task.due) return true;
+						const taskDueDate = new Date(task.due);
+						return taskDueDate >= oneYearAgo && taskDueDate <= targetDate; // align with google calendar behavior
+					});
+					return filteredTasks;
+				} catch (error) {
+					console.error(
+						`Error fetching tasks from list ${taskList.title}:`,
+						error
+					);
+					return [];
+				}
 			});
-
-			return response.data;
+			const taskResults = await Promise.all(taskPromises);
+			const allTasks = taskResults.flat();
+			return {
+				kind: "tasks#tasks",
+				items: allTasks,
+			};
 		} catch (error) {
 			console.error("Error fetching tasks:", error);
-			new Notice("Failed to fetch tasks. Check your API credentials.");
-			new Notice(error);
 			return null;
 		}
 	}
