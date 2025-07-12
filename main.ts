@@ -1,6 +1,7 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
 import { Credentials } from "google-auth-library";
+import { parseCalendarDataToMarkdown } from './parser';
 
 interface GoogleCalendarImporterSettings {
 	calendarMarker: string;
@@ -133,7 +134,8 @@ export default class GoogleCalendarImporter extends Plugin {
 			return;
 		}
 
-		const newCalendarBlock = `\n\n${this.settings.calendarMarker}\n## 📅 Calendar Data for ${dateString}\n\n\`\`\`json\n${JSON.stringify(calendarData, null, 2)}\n\`\`\`\n\n${this.settings.calendarMarker}\n`;
+		const markdownContent = parseCalendarDataToMarkdown(calendarData, dateString);
+		const newCalendarBlock = `${this.settings.calendarMarker}\n${markdownContent}\n${this.settings.calendarMarker}\n`;
 
 		const content = await this.app.vault.read(file);
 		let newContent: string;
