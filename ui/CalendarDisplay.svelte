@@ -50,6 +50,10 @@
     });
   }
 
+  function isAllDayEvent(event: any): boolean {
+    return event.start?.date && event.end?.date && !event.start?.dateTime && !event.end?.dateTime;
+  }
+
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -110,9 +114,13 @@
         <h5>📅 Events</h5>
         <ul class="events-list">
           {#each events as event}
-            {#if event.start?.dateTime && event.end?.dateTime && event.summary}
+            {#if event.summary && (event.start?.dateTime || event.start?.date)}
               <li class="event-item">
-                <strong>{formatTime(event.start.dateTime)} - {formatTime(event.end.dateTime)}</strong>: {event.summary}
+                {#if isAllDayEvent(event)}
+                  <strong>All Day</strong>: {event.summary}
+                {:else if event.start?.dateTime && event.end?.dateTime}
+                  <strong>{formatTime(event.start.dateTime)} - {formatTime(event.end.dateTime)}</strong>: {event.summary}
+                {/if}
               </li>
             {/if}
           {/each}
