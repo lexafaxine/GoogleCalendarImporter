@@ -101,6 +101,11 @@ export default class GoogleCalendarImporter extends Plugin {
 				this.settings.googleRefreshToken = tokens.refresh_token || '';
 				await this.saveSettings();
 				this.initializeGoogleCalendarAPI();
+				this.registerMarkdownCodeBlockProcessor(
+					"google-calendar",
+					createCodeBlockProcessor(this.googleCalendarAPI)
+				);
+				
 				console.log('OAuth flow completed successfully');
 			}
 		} catch (error) {
