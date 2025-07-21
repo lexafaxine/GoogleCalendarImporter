@@ -1,10 +1,9 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, MarkdownView } from 'obsidian';
 import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
 import { Credentials } from "google-auth-library";
-import { parseCalendarDataToMarkdown } from './parser';
+import { createCodeBlockProcessor } from './codeBlockProcessor';
 
 interface GoogleCalendarImporterSettings {
-	calendarMarker: string;
 	enabledForDailyNotes: boolean;
 	googleClientId: string;
 	googleClientSecret: string;
@@ -13,7 +12,6 @@ interface GoogleCalendarImporterSettings {
 }
 
 const DEFAULT_SETTINGS: GoogleCalendarImporterSettings = {
-	calendarMarker: '<!-- google-calendar -->',
 	enabledForDailyNotes: true,
 	googleClientId: '',
 	googleClientSecret: '',
@@ -29,24 +27,31 @@ export default class GoogleCalendarImporter extends Plugin {
 		await this.loadSettings();
 		this.registerEvent(
 			this.app.workspace.on('file-open', (file) => {
-				if (file && this.isDailyNote(file)) {
-					this.injectCalendarEvents(file);
+				if (file && this.settings.enabledForDailyNotes && this.isDailyNote(file)) {
+					this.insertCalendarBlock(file);
 				}
 			})
 		);
 
+		// TODO: add param for dates
 		this.addCommand({
-			id: 'import-google-calendar',
-			name: 'Import Google Calendar events and tasks',
+			id: 'insert-google-calendar-block',
+			name: 'Insert Google Calendar Block',
 			callback: () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (activeFile) {
-					this.injectCalendarEvents(activeFile);
+					this.insertCalendarBlock(activeFile);
 				} else {
-					new Notice('No active file to import events to');
+					new Notice('No active file to insert calendar block');
 				}
 			}
 		});
+
+		this.registerMarkdownCodeBlockProcessor(
+			"google-calendar", // for already-exist check
+			createCodeBlockProcessor(this.googleCalendarAPI)
+		);
+
 		this.addSettingTab(new GoogleCalendarSettingTab(this.app, this));
 	}
 
@@ -58,7 +63,7 @@ export default class GoogleCalendarImporter extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-		this.initializeGoogleCalendarAPI();
+		this.initializeGoogleCalendarAPI(); // TODO: reload authenticate info real time rather than after loadSettings.
 	}
 
 	private initializeGoogleCalendarAPI() {
@@ -117,42 +122,37 @@ export default class GoogleCalendarImporter extends Plugin {
 		return dateMatch ? dateMatch[0] : '';
 	}
 
-	async injectCalendarEvents(file: TFile) {
-		if (!this.settings.enabledForDailyNotes && this.isDailyNote(file)) {
-			return;
+	async insertCalendarBlock(file: TFile) {
+		const content = await this.app.vault.read(file);
+		
+		// Check if google-calendar block already exists
+		if (content.includes('```google-calendar')) {
+			return; // Don't insert duplicate blocks
 		}
 
 		const dateString = this.extractDateFromFilename(file);
-		if (!dateString) {
-			new Notice('Could not extract date from filename');
-			return;
-		}
+		const calendarBlock = `\`\`\`google-calendar
+{
+  "date": "${dateString || 'today'}",
+  "refreshInterval": 60,
+  "showEvents": true,
+  "showTasks": true,
+  "title": "📅 Calendar for ${dateString || 'Today'}"
+}
+\`\`\`
 
-		const calendarData = await this.googleCalendarAPI.getEventsAndTasksForDate(dateString);
-		if (!calendarData) {
-			new Notice('Failed to fetch calendar data. Please check your credentials.');
-			return;
-		}
-
-		const markdownContent = parseCalendarDataToMarkdown(calendarData, dateString);
-		const newCalendarBlock = `${this.settings.calendarMarker}\n${markdownContent}\n${this.settings.calendarMarker}\n`;
-
-		const content = await this.app.vault.read(file);
-		let newContent: string;
-
-		if (content.includes(this.settings.calendarMarker)) {
-			// Replace existing calendar block with latest data
-			const regex = new RegExp(
-				`\\n\\n${this.settings.calendarMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${this.settings.calendarMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n`,
-				'g'
-			);
-			newContent = content.replace(regex, newCalendarBlock);
-		} else {
-			newContent = newCalendarBlock + content;
-		}
+`;
+		const newContent = calendarBlock + content;
 		await this.app.vault.modify(file, newContent);
-		new Notice('Calendar events and tasks updated!');
+
+		// Position cursor after the calendar block
+		const leaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (leaf && leaf.editor) {
+			const lines = calendarBlock.split('\n');
+			leaf.editor.setCursor(lines.length - 1, 0);
+		}
 	}
+
 }
 
 class GoogleCalendarSettingTab extends PluginSettingTab {
@@ -170,22 +170,11 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable for Daily Notes')
-			.setDesc('Automatically inject calendar events when opening daily notes')
+			.setDesc('Automatically insert calendar block when opening daily notes')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enabledForDailyNotes)
 				.onChange(async (value) => {
 					this.plugin.settings.enabledForDailyNotes = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Calendar Marker')
-			.setDesc('HTML comment used to mark injected calendar content')
-			.addText(text => text
-				.setPlaceholder('<!-- google-calendar -->')
-				.setValue(this.plugin.settings.calendarMarker)
-				.onChange(async (value) => {
-					this.plugin.settings.calendarMarker = value;
 					await this.plugin.saveSettings();
 				}));
 
