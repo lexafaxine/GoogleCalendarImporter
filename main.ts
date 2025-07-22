@@ -2,6 +2,7 @@ import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, MarkdownView } f
 import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
 import { Credentials } from "google-auth-library";
 import { createCodeBlockProcessor } from './codeBlockProcessor';
+import { DateInputModal } from './dateInputModal';
 
 interface GoogleCalendarImporterSettings {
 	enabledForDailyNotes: boolean;
@@ -33,14 +34,15 @@ export default class GoogleCalendarImporter extends Plugin {
 			})
 		);
 
-		// TODO: add param for dates
 		this.addCommand({
 			id: 'insert-google-calendar-block',
 			name: 'Insert Google Calendar Block',
 			callback: () => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (activeFile) {
-					this.insertCalendarBlock(activeFile);
+					new DateInputModal(this.app, (date: string) => {
+						this.insertCalendarBlock(activeFile, date, true);
+					}).open();
 				} else {
 					new Notice('No active file to insert calendar block');
 				}
@@ -127,15 +129,15 @@ export default class GoogleCalendarImporter extends Plugin {
 		return dateMatch ? dateMatch[0] : '';
 	}
 
-	async insertCalendarBlock(file: TFile) {
+	async insertCalendarBlock(file: TFile, customDate?: string, isFromCommand?: boolean) {
 		const content = await this.app.vault.read(file);
 		
 		// Check if google-calendar block already exists
-		if (content.includes('```google-calendar')) {
+		if (content.includes('```google-calendar') && !isFromCommand) {
 			return; // Don't insert duplicate blocks
 		}
 
-		const dateString = this.extractDateFromFilename(file);
+		const dateString = customDate || this.extractDateFromFilename(file);
 		const calendarBlock = `\`\`\`google-calendar
 {
   "date": "${dateString || 'today'}",
