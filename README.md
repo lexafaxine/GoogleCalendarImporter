@@ -5,7 +5,11 @@ A simple and light-weighted google calendar importer, allow injecting the events
 ## Features
 
 - 🗓️ **Automatic Daily Notes Integration**: Automatically inject calendar events when opening daily notes
+![auto-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a921e481-df5f-47ab-abc6-3f5ced347e40)
+
 - 📝 **Manual Import Command**: Insert calendar blocks anywhere in your notes with a simple command
+  ![command-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/33cffa31-51cb-4518-ab88-559549c6cf74)
+
 - 🎯 **Date-Specific Imports**: Choose any date to import events for that specific day
 - 🔄 **Live Calendar Blocks**: Uses markdown code blocks as configuration that render your calendar events as you want
 - 🔐 **Secure OAuth Integration**: Secure authentication with Google Calendar using OAuth 2.0
