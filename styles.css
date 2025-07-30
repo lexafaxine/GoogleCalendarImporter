@@ -1,8 +1,16 @@
-/*
+/* Google Calendar Importer Plugin Styles */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* Date Input Modal Styles */
+.google-calendar-modal .date-input {
+	width: 100%;
+	margin-top: 8px;
+}
 
-If your plugin does not need CSS, delete this file.
+.google-calendar-modal .button-container {
+	margin-top: 20px;
+	text-align: right;
+}
 
-*/
+.google-calendar-modal .cancel-button {
+	margin-right: 10px;
+}

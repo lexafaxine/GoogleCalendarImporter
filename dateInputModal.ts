@@ -11,6 +11,7 @@ export class DateInputModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
+		contentEl.addClass('google-calendar-modal');
 		contentEl.createEl('h2', { text: 'Insert Google Calendar Block' });
 
 		const inputContainer = contentEl.createDiv();
@@ -18,15 +19,11 @@ export class DateInputModal extends Modal {
 		
 		this.dateInput = new TextComponent(inputContainer);
 		this.dateInput.setPlaceholder('2024-01-15 or leave empty for today');
-		this.dateInput.inputEl.style.width = '100%';
-		this.dateInput.inputEl.style.marginTop = '8px';
+		this.dateInput.inputEl.addClass('date-input');
 
-		const buttonContainer = contentEl.createDiv();
-		buttonContainer.style.marginTop = '20px';
-		buttonContainer.style.textAlign = 'right';
+		const buttonContainer = contentEl.createDiv('button-container');
 
-		const cancelButton = buttonContainer.createEl('button', { text: 'Cancel' });
-		cancelButton.style.marginRight = '10px';
+		const cancelButton = buttonContainer.createEl('button', { text: 'Cancel', cls: 'cancel-button' });
 		cancelButton.onclick = () => this.close();
 
 		const submitButton = buttonContainer.createEl('button', { text: 'Insert', cls: 'mod-cta' });
