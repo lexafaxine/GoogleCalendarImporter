@@ -1,7 +1,7 @@
 {
 	"id": "google-calendar-importer",
 	"name": "Google Calendar Importer",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "A simple and light-weighted google calendar importer, allow injecting the events / tasks of a day automatically to your daily notes, or import it to anywhere with a command.",
 	"author": "lexafaxine",
