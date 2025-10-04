@@ -140,7 +140,6 @@ export default class GoogleCalendarImporter extends Plugin {
 }
 \`\`\``;
 
-		// Try to use Editor API if in edit mode
 		const leaf = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (leaf && leaf.editor && leaf.file === file) {
 			const content = leaf.editor.getValue();
@@ -152,15 +151,6 @@ export default class GoogleCalendarImporter extends Plugin {
 
 			leaf.editor.setValue(content + calendarBlock);
 			leaf.editor.setCursor(leaf.editor.lastLine(), 0);
-		} else {
-			// Fallback to Vault.process for reading mode or background updates
-			await this.app.vault.process(file, (data) => {
-				// Check if google-calendar block already exists
-				if (data.includes('```google-calendar') && !isFromCommand) {
-					return data; // Don't insert duplicate blocks
-				}
-				return data + calendarBlock;
-			});
 		}
 	}
 
