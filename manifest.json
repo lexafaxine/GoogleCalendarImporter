@@ -6,6 +6,5 @@
 	"description": "A simple and light-weighted google calendar importer, allow injecting the events / tasks of a day automatically to your daily notes, or import it to anywhere with a command.",
 	"author": "lexafaxine",
 	"authorUrl": "https://github.com/lexafaxine",
-	"fundingUrl": "https://github.com/lexafaxine",
 	"isDesktopOnly": true
 }

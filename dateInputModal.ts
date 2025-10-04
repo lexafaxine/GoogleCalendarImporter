@@ -1,4 +1,4 @@
-import { App, Modal, TextComponent } from 'obsidian';
+import { App, Modal, TextComponent, ButtonComponent } from 'obsidian';
 
 export class DateInputModal extends Modal {
 	private dateInput: TextComponent;
@@ -12,7 +12,7 @@ export class DateInputModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.addClass('google-calendar-modal');
-		contentEl.createEl('h2', { text: 'Insert Google Calendar Block' });
+		contentEl.createEl('h2', { text: 'Insert Google Calendar block' });
 
 		const inputContainer = contentEl.createDiv();
 		inputContainer.createEl('label', { text: 'Date' });
@@ -23,19 +23,24 @@ export class DateInputModal extends Modal {
 
 		const buttonContainer = contentEl.createDiv('button-container');
 
-		const cancelButton = buttonContainer.createEl('button', { text: 'Cancel', cls: 'cancel-button' });
-		cancelButton.onclick = () => this.close();
+		new ButtonComponent(buttonContainer)
+			.setButtonText('Cancel')
+			.onClick(() => this.close());
 
-		const submitButton = buttonContainer.createEl('button', { text: 'Insert', cls: 'mod-cta' });
-		submitButton.onclick = () => {
-			const dateValue = this.dateInput.getValue().trim();
-			this.onSubmit(dateValue);
-			this.close();
-		};
+		new ButtonComponent(buttonContainer)
+			.setButtonText('Insert')
+			.setCta()
+			.onClick(() => {
+				const dateValue = this.dateInput.getValue().trim();
+				this.onSubmit(dateValue);
+				this.close();
+			});
 
 		this.dateInput.inputEl.addEventListener('keypress', (e) => {
 			if (e.key === 'Enter') {
-				submitButton.click();
+				const dateValue = this.dateInput.getValue().trim();
+				this.onSubmit(dateValue);
+				this.close();
 			}
 		});
 
