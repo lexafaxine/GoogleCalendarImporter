@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, MarkdownView } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, MarkdownView } from 'obsidian';
 import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
 import { Credentials } from "google-auth-library";
 import { createCodeBlockProcessor } from './codeBlockProcessor';
@@ -27,25 +27,27 @@ export default class GoogleCalendarImporter extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.registerEvent(
-			this.app.workspace.on('file-open', (file) => {
+			this.app.workspace.on('file-open', async (file) => {
 				if (file && this.settings.enabledForDailyNotes && this.isDailyNote(file)) {
-					this.insertCalendarBlock(file);
+					await this.insertCalendarBlock(file);
 				}
 			})
 		);
 
 		this.addCommand({
 			id: 'insert-google-calendar-block',
-			name: 'Insert Google Calendar Block',
-			callback: () => {
+			name: 'Insert Google Calendar block',
+			checkCallback: (checking) => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (activeFile) {
-					new DateInputModal(this.app, (date: string) => {
-						this.insertCalendarBlock(activeFile, date, true);
-					}).open();
-				} else {
-					new Notice('No active file to insert calendar block');
+					if (!checking) {
+						new DateInputModal(this.app, (date: string) => {
+							this.insertCalendarBlock(activeFile, date, true);
+						}).open();
+					}
+					return true;
 				}
+				return false;
 			}
 		});
 
@@ -77,7 +79,6 @@ export default class GoogleCalendarImporter extends Plugin {
 		};
 
 		const onTokensUpdated = async (tokens: Credentials) => {
-			console.log('Tokens updated automatically');
 			if (tokens.access_token) {
 				this.settings.googleAccessToken = tokens.access_token;
 			}
@@ -96,7 +97,6 @@ export default class GoogleCalendarImporter extends Plugin {
 		}
 
 		try {
-			console.log('Starting Google OAuth flow...');
 			const tokens = await this.googleCalendarAPI.startOAuthFlow();
 			if (tokens.access_token && tokens.refresh_token) {
 				this.settings.googleAccessToken = tokens.access_token;
@@ -107,8 +107,6 @@ export default class GoogleCalendarImporter extends Plugin {
 					"google-calendar",
 					createCodeBlockProcessor(this.googleCalendarAPI)
 				);
-				
-				console.log('OAuth flow completed successfully');
 			}
 		} catch (error) {
 			console.error('Error during OAuth flow:', error);
@@ -130,15 +128,9 @@ export default class GoogleCalendarImporter extends Plugin {
 	}
 
 	async insertCalendarBlock(file: TFile, customDate?: string, isFromCommand?: boolean) {
-		const content = await this.app.vault.read(file);
-		
-		// Check if google-calendar block already exists
-		if (content.includes('```google-calendar') && !isFromCommand) {
-			return; // Don't insert duplicate blocks
-		}
-
 		const dateString = customDate || this.extractDateFromFilename(file);
-		const calendarBlock = `\`\`\`google-calendar
+		const calendarBlock = `
+\`\`\`google-calendar
 {
   "date": "${dateString || 'today'}",
   "refreshInterval": 60,
@@ -146,17 +138,29 @@ export default class GoogleCalendarImporter extends Plugin {
   "showTasks": true,
   "title": "📅 Calendar for ${dateString || 'Today'}"
 }
-\`\`\`
+\`\`\``;
 
-`;
-		const newContent = calendarBlock + content;
-		await this.app.vault.modify(file, newContent);
-
-		// Position cursor after the calendar block
+		// Try to use Editor API if in edit mode
 		const leaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (leaf && leaf.editor) {
-			const lines = calendarBlock.split('\n');
-			leaf.editor.setCursor(lines.length - 1, 0);
+		if (leaf && leaf.editor && leaf.file === file) {
+			const content = leaf.editor.getValue();
+
+			// Check if google-calendar block already exists
+			if (content.includes('```google-calendar') && !isFromCommand) {
+				return; // Don't insert duplicate blocks
+			}
+
+			leaf.editor.setValue(content + calendarBlock);
+			leaf.editor.setCursor(leaf.editor.lastLine(), 0);
+		} else {
+			// Fallback to Vault.process for reading mode or background updates
+			await this.app.vault.process(file, (data) => {
+				// Check if google-calendar block already exists
+				if (data.includes('```google-calendar') && !isFromCommand) {
+					return data; // Don't insert duplicate blocks
+				}
+				return data + calendarBlock;
+			});
 		}
 	}
 
@@ -176,7 +180,7 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Enable for Daily Notes')
+			.setName('Enable for daily notes')
 			.setDesc('Automatically insert calendar block when opening daily notes')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enabledForDailyNotes)
@@ -185,13 +189,13 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', {text: 'Google Calendar API Settings'});
+		containerEl.createEl('h3', {text: 'Google Calendar API'});
 
 		new Setting(containerEl)
-			.setName('Google Client ID')
-			.setDesc('OAuth 2.0 client ID from Google Cloud Console')
+			.setName('Google client ID')
+			.setDesc('OAuth 2.0 client ID from Google Cloud console')
 			.addText(text => text
-				.setPlaceholder('Enter your Google Client ID')
+				.setPlaceholder('Enter your Google client ID')
 				.setValue(this.plugin.settings.googleClientId)
 				.onChange(async (value) => {
 					this.plugin.settings.googleClientId = value;
@@ -199,10 +203,10 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Google Client Secret')
+			.setName('Google client secret')
 			.setDesc('OAuth 2.0 client secret from Google Cloud Console')
 			.addText(text => text
-				.setPlaceholder('Enter your Google Client Secret')
+				.setPlaceholder('Enter your Google client secret')
 				.setValue(this.plugin.settings.googleClientSecret)
 				.onChange(async (value) => {
 					this.plugin.settings.googleClientSecret = value;
@@ -210,7 +214,7 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Google Authorization')
+			.setName('Google authorization')
 			.setDesc('Click to authorize access to your Google Calendar')
 			.addButton(button => button
 				.setButtonText('Authorize Google Calendar')
@@ -220,7 +224,7 @@ class GoogleCalendarSettingTab extends PluginSettingTab {
 
 		const authStatus = this.plugin.settings.googleAccessToken ? 'Authorized ✓' : 'Not authorized';
 		new Setting(containerEl)
-			.setName('Authorization Status')
+			.setName('Authorization status')
 			.setDesc(`Current status: ${authStatus}`);
 	}
 }
