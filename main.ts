@@ -29,7 +29,10 @@ export default class GoogleCalendarImporter extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on('file-open', async (file) => {
 				if (file && this.settings.enabledForDailyNotes && this.isDailyNote(file)) {
-					await this.insertCalendarBlock(file);
+					// Wait for the view to switch to the new file before inserting
+					setTimeout(async () => {
+						await this.insertCalendarBlock(file);
+					}, 100);
 				}
 			})
 		);
@@ -129,14 +132,17 @@ export default class GoogleCalendarImporter extends Plugin {
 
 	async insertCalendarBlock(file: TFile, customDate?: string, isFromCommand?: boolean) {
 		const dateString = customDate || this.extractDateFromFilename(file);
+		const todayDate = window.moment().format('YYYY-MM-DD');
+		const displayDate = dateString || todayDate;
+
 		const calendarBlock = `
 \`\`\`google-calendar
 {
-  "date": "${dateString || 'today'}",
+  "date": "${displayDate}",
   "refreshInterval": 60,
   "showEvents": true,
   "showTasks": true,
-  "title": "📅 Calendar for ${dateString || 'Today'}"
+  "title": "📅 Calendar for ${displayDate}"
 }
 \`\`\``;
 
