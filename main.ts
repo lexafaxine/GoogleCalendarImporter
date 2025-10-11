@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, MarkdownView } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, MarkdownView, moment } from 'obsidian';
 import { GoogleCalendarAPI, GoogleCalendarCredentials } from './googleCalendarAPI';
 import { Credentials } from "google-auth-library";
 import { createCodeBlockProcessor } from './codeBlockProcessor';
@@ -40,12 +40,12 @@ export default class GoogleCalendarImporter extends Plugin {
 		this.addCommand({
 			id: 'insert-google-calendar-block',
 			name: 'Insert Google Calendar block',
-			checkCallback: (checking) => {
-				const activeFile = this.app.workspace.getActiveFile();
-				if (activeFile) {
+			editorCheckCallback: (checking, editor, ctx) => {
+				if (ctx instanceof MarkdownView && ctx.file) {
 					if (!checking) {
+						const file = ctx.file;
 						new DateInputModal(this.app, (date: string) => {
-							this.insertCalendarBlock(activeFile, date, true);
+							this.insertCalendarBlock(file, date, true);
 						}).open();
 					}
 					return true;
@@ -131,9 +131,12 @@ export default class GoogleCalendarImporter extends Plugin {
 	}
 
 	async insertCalendarBlock(file: TFile, customDate?: string, isFromCommand?: boolean) {
-		const dateString = customDate || this.extractDateFromFilename(file);
-		const todayDate = window.moment().format('YYYY-MM-DD');
-		const displayDate = dateString || todayDate;
+		const todayDate = moment().format('YYYY-MM-DD');
+
+		const dateString = isFromCommand
+			? (customDate || todayDate)
+			: (customDate || this.extractDateFromFilename(file) || todayDate);
+		const displayDate = dateString;
 
 		const calendarBlock = `
 \`\`\`google-calendar
